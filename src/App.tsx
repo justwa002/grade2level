@@ -333,26 +333,26 @@ export default function App() {
 
   // --- 畫面渲染 ---
   return (
-    <div className="min-h-screen bg-[#F4F7F9] text-slate-800 p-2 md:p-6 font-sans selection:bg-blue-100 flex flex-col">
-      <div className="max-w-[1200px] mx-auto w-full space-y-4 flex-grow flex flex-col">
-        
-        {/* 全域免責聲明 */}
-        <div className="bg-amber-50 border border-amber-200/60 rounded-xl p-3 flex items-start md:items-center text-amber-800 text-xs md:text-sm font-medium shadow-sm">
-          <AlertTriangle className="w-5 h-5 mr-3 flex-shrink-0 text-amber-500" />
-          <p><strong>免責說明：</strong>本程式為老師自行設計之快速換算輔助工具，並非學校官方正式成績系統。若對成績或排名有疑問，請洽詢學校教務處。</p>
-        </div>
+    <div className="app-shell min-h-screen bg-[#F4F7F9] text-slate-800 p-2 md:p-6 font-sans selection:bg-blue-100 flex flex-col items-center">
+      <div className="max-w-[1200px] mx-auto w-full space-y-4 flex-grow flex flex-col items-center">
 
-        {/* 極簡 Header */}
-        <header className="flex justify-between items-center bg-white p-3 md:p-4 rounded-2xl shadow-sm border border-slate-100">
+        {/* 置頂標題 + 免責聲明 */}
+        <header className="w-full flex flex-col items-center bg-white p-4 md:p-5 rounded-2xl shadow-sm border border-slate-100 gap-3">
           <div className="flex items-center space-x-3 cursor-pointer" onClick={() => { setView('home'); setSelectedGrade(null); }}>
-            <div className="bg-blue-500 p-2 md:p-2.5 rounded-xl text-white shadow-sm">
+            <div className="bg-blue-600 p-2.5 md:p-3 rounded-xl text-white shadow-sm">
               <Calculator className="w-5 h-5" />
             </div>
             <div>
-              <h1 className="text-lg md:text-xl font-extrabold text-slate-800 tracking-tight">成績等級產生器</h1>
+              <h1 className="text-xl md:text-2xl font-black text-slate-800 tracking-tight">成績等級產生器</h1>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+
+          <div className="w-full bg-amber-50 border border-amber-200/60 rounded-xl px-3 py-2.5 flex items-start md:items-center text-amber-800 text-xs md:text-sm font-medium shadow-sm">
+            <AlertTriangle className="w-5 h-5 mr-3 flex-shrink-0 text-amber-500" />
+            <p><strong>免責說明：</strong>本程式為老師自行設計之快速換算輔助工具，並非學校官方正式成績系統。若對成績或排名有疑問，請洽詢學校教務處。</p>
+          </div>
+
+          <div className="flex items-center gap-2 self-end">
             {view !== 'home' && view !== 'admin_login' && view !== 'admin_settings' && (
               <button onClick={() => setView('admin_login')} className="text-xs md:text-sm font-semibold text-slate-500 hover:text-slate-800 px-2 md:px-3 py-1.5 flex items-center bg-slate-100 rounded-lg transition-colors">
                 <Settings className="w-3.5 h-3.5 mr-1.5" /> 管理員設定
@@ -373,7 +373,7 @@ export default function App() {
         )}
 
         {/* 主內容區塊 (動態填滿剩餘空間) */}
-        <main className="bg-white rounded-2xl shadow-sm border border-slate-100 flex-grow flex flex-col relative overflow-hidden">
+        <main className="w-full bg-white rounded-2xl shadow-sm border border-slate-100 flex-grow flex flex-col relative overflow-hidden">
           
           {/* 介面一：首頁 (年級選擇) */}
           {view === 'home' && (
@@ -384,13 +384,19 @@ export default function App() {
               <h2 className="text-2xl font-extrabold text-slate-800 mb-2">請選擇年級</h2>
               <p className="text-slate-500 text-sm mb-8 text-center">選擇年級以載入專屬全校標準與等級門檻</p>
               
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full max-w-2xl">
-                {['7', '8', '9'].map(grade => (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-4xl">
+                {['7', '8', '9'].map((grade, index) => (
                   <button key={grade} onClick={() => { setSelectedGrade(grade); setView('input'); setError(null); }}
-                    className="group flex flex-col items-center justify-center p-6 bg-white border-2 border-slate-100 hover:border-blue-400 hover:shadow-md hover:bg-blue-50/30 rounded-2xl transition-all"
+                    className={`group flex flex-col items-center justify-center py-10 px-8 border-2 rounded-3xl transition-all shadow-md hover:shadow-xl hover:scale-[1.02] ${
+                      index === 0
+                        ? 'bg-gradient-to-br from-blue-500 to-indigo-600 border-blue-300 text-white'
+                        : index === 1
+                        ? 'bg-gradient-to-br from-teal-500 to-cyan-600 border-teal-300 text-white'
+                        : 'bg-gradient-to-br from-violet-500 to-fuchsia-600 border-violet-300 text-white'
+                    }`}
                   >
-                    <span className="text-3xl font-black text-slate-300 group-hover:text-blue-500 mb-1">{grade}</span>
-                    <span className="text-sm font-bold text-slate-600 group-hover:text-blue-700">年級專區</span>
+                    <span className="text-5xl font-black mb-2 drop-shadow-sm">{grade}</span>
+                    <span className="text-base font-extrabold tracking-wide">年級專區</span>
                   </button>
                 ))}
               </div>

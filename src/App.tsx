@@ -1,5 +1,9 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Upload, FileDown, ClipboardCopy, Calculator, CheckCircle2, RefreshCw, Settings, ArrowLeft, Lock, Unlock, AlertTriangle, Users, BookOpen, ChevronRight, FileSpreadsheet, Trash2 } from 'lucide-react';
+import { 
+  Upload, FileDown, ClipboardCopy, Calculator, CheckCircle2, 
+  Settings, ArrowLeft, Lock, Unlock, AlertTriangle, Users, 
+  BookOpen, ChevronRight, FileSpreadsheet, Trash2, Home, Info 
+} from 'lucide-react';
 
 // --- 1. 核心商業邏輯與工具函式 ---
 const parseCSV = (csvText) => {
@@ -84,11 +88,10 @@ const exportToCSV = (data, filename) => {
     ...data.map(row => headers.map(header => `"${row[header] || ''}"`).join(','))
   ].join('\n');
   const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-  const link = document.createElement('url');
+  const link = document.createElement('a');
   const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = filename;
-  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+  link.href = url; link.download = filename;
+  document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
 };
 
 // --- 2. 預設資料設定 ---
@@ -96,18 +99,30 @@ const defaultSettings = `,等級,國文,英文,數學,社會,自然\n,A++,92,100
 const defaultDistribution = `分數組距,全校人數,累計人數\n100,0,0\n98-99.99,0,0\n96-97.99,23,23\n94-95.99,52,75\n92-93.99,76,151\n90-91.99,73,224\n87-90.99,102,326\n84-86.99,75,401\n80-83.99,117,518\n70-79.99,174,692\n60-69.99,127,819\n0-59.99,25,844`;
 
 const INITIAL_GRID_ROWS = 40;
-const INITIAL_GRID_COLS = 8; // 縮減為 8 欄，符合多數需求且能在單頁顯示
-const defaultHeaders = ['座號', '姓名', '國文', '英文', '數學', '社會', '自然', ''];
+const FIXED_HEADERS = ['座號', '姓名', '國文', '英文', '數學', '社會', '自然'];
+const INITIAL_GRID_COLS = FIXED_HEADERS.length;
+
+// 精確定義各欄位像素寬度 (加總為 750px)
+const COL_WIDTHS = {
+  '#': 'w-[50px]',
+  '座號': 'w-[80px]',
+  '姓名': 'w-[120px]',
+  '國文': 'w-[100px]',
+  '英文': 'w-[100px]',
+  '數學': 'w-[100px]',
+  '社會': 'w-[100px]',
+  '自然': 'w-[100px]',
+};
 
 const createInitialGrid = () => {
   const grid = Array(INITIAL_GRID_ROWS).fill(0).map(() => Array(INITIAL_GRID_COLS).fill(''));
-  grid[0] = [...defaultHeaders];
+  grid[0] = [...FIXED_HEADERS];
   return grid;
 };
 
 // --- 3. 主應用程式元件 ---
 export default function App() {
-  const [view, setView] = useState('home'); // 'home' | 'input' | 'result' | 'admin_login' | 'admin_settings'
+  const [view, setView] = useState('home'); 
   const [selectedGrade, setSelectedGrade] = useState(null); 
   const [error, setError] = useState(null);
   const [isAdminAuth, setIsAdminAuth] = useState(false);
@@ -146,6 +161,7 @@ export default function App() {
 
   // 表格變更與貼上處理
   const handleCellChange = (rIdx, cIdx, value) => {
+    if (rIdx === 0) return; 
     const newGrid = [...gridData];
     newGrid[rIdx] = [...newGrid[rIdx]];
     newGrid[rIdx][cIdx] = value;
@@ -154,6 +170,7 @@ export default function App() {
 
   const handleGridPaste = (e, startRow, startCol) => {
     e.preventDefault();
+    if (startRow === 0) return; 
     const pasteText = e.clipboardData.getData('text');
     if (!pasteText) return;
     const rows = pasteText.split(/\r?\n/);
@@ -164,25 +181,22 @@ export default function App() {
       const cells = rowStr.split(/\t|,/);
       const targetRow = startRow + i;
       
-      // 動態擴展列數
       if (targetRow >= newGrid.length) {
-        newGrid.push(Array(newGrid[0].length).fill(''));
+        newGrid.push(Array(INITIAL_GRID_COLS).fill(''));
       }
       
       newGrid[targetRow] = [...newGrid[targetRow]];
       cells.forEach((cellVal, j) => {
         const targetCol = startCol + j;
-        // 動態擴展欄數
-        if (targetCol >= newGrid[targetRow].length) {
-           newGrid.forEach(r => r.push(''));
+        if (targetCol < INITIAL_GRID_COLS) { 
+          newGrid[targetRow][targetCol] = cellVal.trim().replace(/^"|"$/g, '');
         }
-        newGrid[targetRow][targetCol] = cellVal.trim().replace(/^"|"$/g, '');
       });
     });
     setGridData(newGrid);
   };
 
-  // 匯入 Excel 到即時表格
+  // 匯入 Excel
   const handleGridFileUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -193,20 +207,30 @@ export default function App() {
       try {
         const workbook = window.XLSX.read(new Uint8Array(event.target.result), { type: 'array' });
         const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-        // 轉換為二維陣列
         const arr = window.XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: '' });
         
-        // 確保符合最小網格大小
-        const rowsCount = Math.max(INITIAL_GRID_ROWS, arr.length);
-        const colsCount = Math.max(INITIAL_GRID_COLS, arr.length > 0 ? arr[0].length : INITIAL_GRID_COLS);
-        
-        const newGrid = Array(rowsCount).fill(0).map((_, rIdx) => {
-          const row = arr[rIdx] || [];
-          return Array(colsCount).fill('').map((_, cIdx) => {
-             return row[cIdx] !== undefined ? String(row[cIdx]) : '';
-          });
-        });
+        let headerRowIndex = -1;
+        for (let i = 0; i < Math.min(arr.length, 10); i++) {
+           const rowStr = arr[i].join('').toLowerCase();
+           if (rowStr.includes('座號') && rowStr.includes('姓名')) {
+              headerRowIndex = i; break;
+           }
+        }
 
+        const dataStartRow = headerRowIndex !== -1 ? headerRowIndex + 1 : 1;
+        const rowsCount = Math.max(INITIAL_GRID_ROWS, arr.length - dataStartRow + 1);
+        
+        const newGrid = Array(rowsCount).fill(0).map(() => Array(INITIAL_GRID_COLS).fill(''));
+        newGrid[0] = [...FIXED_HEADERS];
+
+        for (let i = dataStartRow; i < arr.length; i++) {
+           const sourceRow = arr[i];
+           const targetRowIdx = i - dataStartRow + 1;
+           if (!sourceRow) continue;
+           for(let j = 0; j < Math.min(sourceRow.length, INITIAL_GRID_COLS); j++) {
+               newGrid[targetRowIdx][j] = sourceRow[j] !== undefined ? String(sourceRow[j]) : '';
+           }
+        }
         setGridData(newGrid);
         setError(null);
       } catch (err) {
@@ -224,9 +248,7 @@ export default function App() {
     }
   };
 
-  // 管理員設定檔案上傳與登入
   const handleAdminFileUpload = (e, type) => {
-    // ... [原有邏輯保留] ...
     const file = e.target.files[0];
     if (!file) return;
     const fileExt = file.name.split('.').pop().toLowerCase();
@@ -260,6 +282,12 @@ export default function App() {
     } else { setError("密碼錯誤。"); }
   };
 
+  const goHome = () => {
+    setView('home');
+    setSelectedGrade(null);
+    setError(null);
+  };
+
   // 產生報表
   const generateReportData = useMemo(() => {
     if (view !== 'result') return null;
@@ -273,7 +301,7 @@ export default function App() {
       headers.forEach((h, i) => {
         if (h) {
           obj[h] = row[i];
-          if (row[i].trim() !== '') hasData = true;
+          if (row[i] && row[i].trim() !== '') hasData = true;
         }
       });
       return hasData ? obj : null;
@@ -282,7 +310,7 @@ export default function App() {
     if (rawScoresData.length === 0) return { error: "沒有可計算的資料。" };
 
     const unmappedSubjects = subjects.filter(sub => !currentParsedSettings.settings[sub]);
-    const calculatedData = rawScoresData.map(student => {
+    let calculatedData = rawScoresData.map(student => {
       let totalScore = 0; let validCount = 0;
       const resultRow = { '座號': student['座號'] || '', '姓名': student['姓名'] || '' };
 
@@ -310,11 +338,17 @@ export default function App() {
       if (schoolRank) student['預估校排'] = schoolRank;
     });
 
+    calculatedData.sort((a, b) => {
+        const seatA = parseInt(a['座號'], 10) || 999;
+        const seatB = parseInt(b['座號'], 10) || 999;
+        return seatA - seatB;
+    });
+
     return { data: calculatedData, subjects, unmappedSubjects };
   }, [view, gridData, currentParsedSettings, currentDistMap]);
 
   const handleGenerate = () => {
-    const hasData = gridData.slice(1).some(row => row.some(cell => cell.trim() !== ''));
+    const hasData = gridData.slice(1).some(row => row.some(cell => cell && cell.trim() !== ''));
     if (hasData) { setView('result'); setError(null); } 
     else { setError("請先在表格內輸入成績資料。"); }
   };
@@ -327,313 +361,304 @@ export default function App() {
     ].join('\n');
     const textArea = document.createElement("textarea");
     textArea.value = tsvContent; document.body.appendChild(textArea); textArea.select();
-    try { document.execCommand('copy'); alert("✅ 已成功複製！"); } catch (err) { alert("複製失敗。"); }
+    try { document.execCommand('copy'); alert("✅ 已成功複製報表資料！"); } catch (err) { alert("複製失敗，請手動選取。"); }
     document.body.removeChild(textArea);
   };
 
   // --- 畫面渲染 ---
   return (
-    <div className="min-h-screen bg-[#F4F7F9] text-slate-800 p-2 md:p-6 font-sans selection:bg-blue-100 flex flex-col">
-      <div className="max-w-[1200px] mx-auto w-full space-y-4 flex-grow flex flex-col">
+    <div className="min-h-screen bg-[#F4F7F9] text-slate-800 p-4 md:p-6 font-sans flex flex-col items-center">
+      {/* 限制最大寬度為 900px，居中顯示 */}
+      <div className="w-full max-w-[900px] flex flex-col flex-grow space-y-4">
         
-        {/* 全域免責聲明 */}
-        <div className="bg-amber-50 border border-amber-200/60 rounded-xl p-3 flex items-start md:items-center text-amber-800 text-xs md:text-sm font-medium shadow-sm">
-          <AlertTriangle className="w-5 h-5 mr-3 flex-shrink-0 text-amber-500" />
-          <p><strong>免責說明：</strong>本程式為老師自行設計之快速換算輔助工具，並非學校官方正式成績系統。若對成績或排名有疑問，請洽詢學校教務處。</p>
-        </div>
-
-        {/* 極簡 Header */}
-        <header className="flex justify-between items-center bg-white p-3 md:p-4 rounded-2xl shadow-sm border border-slate-100">
-          <div className="flex items-center space-x-3 cursor-pointer" onClick={() => { setView('home'); setSelectedGrade(null); }}>
-            <div className="bg-blue-500 p-2 md:p-2.5 rounded-xl text-white shadow-sm">
-              <Calculator className="w-5 h-5" />
+        {/* Header */}
+        <header className="w-full flex justify-between items-center bg-white p-4 md:p-5 rounded-2xl shadow-sm border border-slate-100">
+          <div className="flex items-center space-x-4 cursor-pointer" onClick={goHome}>
+            <div className="bg-blue-600 p-2.5 rounded-xl text-white shadow-md">
+              <Calculator className="w-6 h-6" />
             </div>
-            <div>
-              <h1 className="text-lg md:text-xl font-extrabold text-slate-800 tracking-tight">成績等級產生器</h1>
-            </div>
+            <h1 className="text-xl md:text-2xl font-black text-slate-800 tracking-tight">成績等級產生器</h1>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             {view !== 'home' && view !== 'admin_login' && view !== 'admin_settings' && (
-              <button onClick={() => setView('admin_login')} className="text-xs md:text-sm font-semibold text-slate-500 hover:text-slate-800 px-2 md:px-3 py-1.5 flex items-center bg-slate-100 rounded-lg transition-colors">
-                <Settings className="w-3.5 h-3.5 mr-1.5" /> 管理員設定
+              <button onClick={() => setView('admin_login')} className="text-sm font-bold text-slate-500 hover:text-slate-800 px-3 py-2 flex items-center bg-slate-100 rounded-lg transition-colors">
+                <Settings className="w-4 h-4 mr-2" /> 管理設定
               </button>
             )}
-            {view.includes('admin') && (
-               <button onClick={() => setView('home')} className="text-xs md:text-sm font-semibold text-slate-600 hover:text-slate-800 px-3 py-1.5 flex items-center bg-slate-100 rounded-lg">
-                 返回
+            {view !== 'home' && (
+               <button onClick={goHome} className="text-sm font-bold text-blue-700 hover:text-white hover:bg-blue-600 px-4 py-2 flex items-center bg-blue-50 border border-blue-200 rounded-lg transition-all shadow-sm">
+                 <Home className="w-4 h-4 mr-2" /> 返回首頁
                </button>
             )}
           </div>
         </header>
 
         {error && (
-          <div className="bg-red-50 text-red-600 px-4 py-3 rounded-xl flex items-center border border-red-100 text-sm font-medium">
-            <AlertTriangle className="w-4 h-4 mr-2 flex-shrink-0" /> {error}
+          <div className="w-full bg-red-50 text-red-600 px-5 py-4 rounded-xl flex items-center border border-red-200 text-base font-bold shadow-sm">
+            <AlertTriangle className="w-5 h-5 mr-3 flex-shrink-0" /> {error}
           </div>
         )}
 
-        {/* 主內容區塊 (動態填滿剩餘空間) */}
-        <main className="bg-white rounded-2xl shadow-sm border border-slate-100 flex-grow flex flex-col relative overflow-hidden">
+        {/* 主內容區塊 */}
+        <main className="w-full bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col flex-grow relative overflow-hidden items-center">
           
-          {/* 介面一：首頁 (年級選擇) */}
+          {/* 首頁 */}
           {view === 'home' && (
-            <div className="p-6 md:p-12 flex flex-col items-center justify-center flex-grow animate-in zoom-in-95">
-              <div className="w-14 h-14 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mb-4">
-                <BookOpen className="w-7 h-7" />
+            <div className="p-8 md:p-16 flex flex-col items-center justify-center flex-grow animate-in zoom-in-95 w-full">
+              <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mb-6 shadow-inner">
+                <BookOpen className="w-10 h-10" />
               </div>
-              <h2 className="text-2xl font-extrabold text-slate-800 mb-2">請選擇年級</h2>
-              <p className="text-slate-500 text-sm mb-8 text-center">選擇年級以載入專屬全校標準與等級門檻</p>
+              <h2 className="text-3xl font-black text-slate-800 mb-3">請選擇欲輸入的年級</h2>
+              <p className="text-slate-500 text-base mb-10 text-center font-medium">系統將自動載入該年級對應的全校組距標準與等級門檻</p>
               
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full max-w-2xl">
+              <div className="flex flex-wrap justify-center gap-6 w-full">
                 {['7', '8', '9'].map(grade => (
                   <button key={grade} onClick={() => { setSelectedGrade(grade); setView('input'); setError(null); }}
-                    className="group flex flex-col items-center justify-center p-6 bg-white border-2 border-slate-100 hover:border-blue-400 hover:shadow-md hover:bg-blue-50/30 rounded-2xl transition-all"
+                    className="w-32 h-40 group flex flex-col items-center justify-center p-4 bg-white border-2 border-slate-200 hover:border-blue-500 hover:shadow-lg hover:bg-blue-50/50 rounded-2xl transition-all"
                   >
-                    <span className="text-3xl font-black text-slate-300 group-hover:text-blue-500 mb-1">{grade}</span>
-                    <span className="text-sm font-bold text-slate-600 group-hover:text-blue-700">年級專區</span>
+                    <span className="text-5xl font-black text-slate-300 group-hover:text-blue-600 mb-2 transition-colors">{grade}</span>
+                    <span className="text-base font-bold text-slate-500 group-hover:text-blue-800">年級專區</span>
                   </button>
                 ))}
               </div>
             </div>
           )}
 
-          {/* 介面二：極簡輸入區 (教師操作) */}
+          {/* 成績輸入區 */}
           {view === 'input' && selectedGrade && (
-            <div className="flex flex-col h-full flex-grow p-4 md:p-5 animate-in fade-in">
+            <div className="flex flex-col items-center w-full flex-grow p-6 animate-in fade-in">
               
-              {/* 操作工具列 */}
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-3 gap-3">
-                <div className="flex items-center">
-                  <span className="px-3 py-1 bg-blue-100 text-blue-800 font-bold rounded-lg text-sm mr-3">
-                    {selectedGrade} 年級
-                  </span>
-                  <span className="text-sm font-bold text-slate-600">填寫表格，或點擊右側匯入</span>
-                </div>
+              {/* 精準寬度包裹層 (750px)，強制所有元素在此範圍內對齊 */}
+              <div className="w-[750px] flex flex-col">
                 
-                <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-                  <input type="file" accept=".csv, .xlsx, .xls" style={{ display: 'none' }} ref={gridFileInputRef} onChange={handleGridFileUpload} />
-                  <button onClick={() => gridFileInputRef.current.click()} className="flex-1 md:flex-none flex items-center justify-center px-4 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold rounded-xl transition-colors text-sm">
-                    <FileSpreadsheet className="w-4 h-4 mr-1.5" /> 匯入 Excel
-                  </button>
-                  <button onClick={handleClearGrid} className="px-3 py-2 bg-slate-50 hover:bg-slate-100 text-slate-500 border border-slate-200 rounded-xl transition-colors text-sm flex items-center justify-center" title="清空表格">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                  <button onClick={handleGenerate} className="flex-1 md:flex-none px-6 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl transition-all shadow-md text-sm flex items-center justify-center">
-                    產生等級報表 <ChevronRight className="w-4 h-4 ml-1" />
+                {/* 操作說明區塊 */}
+                <div className="w-full bg-blue-50/60 border border-blue-200 rounded-xl p-4 mb-5 flex items-start shadow-sm">
+                  <Info className="w-5 h-5 text-blue-600 mr-3 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <h3 className="text-base font-bold text-blue-800 mb-1">【{selectedGrade}年級】成績輸入說明</h3>
+                    <p className="text-sm text-blue-700 leading-relaxed font-medium">
+                      1. 支援直接在下方表格內輸入或修改成績。<br />
+                      2. 支援從 Excel 複製多筆資料，點選表格首格後按下 <kbd className="px-1.5 py-0.5 bg-white border border-blue-200 rounded text-xs mx-1">Ctrl+V</kbd> 貼上。<br />
+                      3. 也可點選「匯入 Excel」按鈕直接上傳檔案（系統會自動對齊座號與姓名）。
+                    </p>
+                  </div>
+                </div>
+
+                {/* 操作工具列 */}
+                <div className="w-full flex justify-between items-center mb-4">
+                  <div className="flex gap-3">
+                    <input type="file" accept=".csv, .xlsx, .xls" style={{ display: 'none' }} ref={gridFileInputRef} onChange={handleGridFileUpload} />
+                    <button onClick={() => gridFileInputRef.current.click()} className="flex items-center justify-center px-4 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold rounded-xl transition-colors text-sm shadow-sm">
+                      <FileSpreadsheet className="w-4 h-4 mr-2" /> 匯入 Excel
+                    </button>
+                    <button onClick={handleClearGrid} className="px-4 py-2 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 font-bold rounded-xl transition-colors text-sm flex items-center justify-center shadow-sm">
+                      <Trash2 className="w-4 h-4 mr-2" /> 清空表格
+                    </button>
+                  </div>
+                  <button onClick={handleGenerate} className="px-6 py-2.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl transition-all shadow-md text-base flex items-center justify-center">
+                    產生報表 <ChevronRight className="w-5 h-5 ml-1" />
                   </button>
                 </div>
-              </div>
 
-              {/* 緊湊型即時表格 (Compact Grid) */}
-              <div className="border border-slate-200 rounded-xl overflow-hidden shadow-inner flex-grow bg-slate-50 flex flex-col min-h-[400px]">
-                <div className="overflow-auto flex-grow custom-scrollbar">
-                  <table className="w-full text-[13px] border-collapse min-w-[600px] table-fixed">
-                    <thead className="sticky top-0 z-20 bg-slate-200 shadow-[0_1px_0_0_#cbd5e1]">
-                      <tr>
-                        <th className="w-8 md:w-10 border-r border-slate-300 text-slate-500 py-1.5 text-center">#</th>
-                        {gridData[0].map((header, cIdx) => (
-                          <th key={`h-${cIdx}`} className="p-0 border-r border-slate-300 last:border-r-0 relative">
-                            <input
-                              type="text"
-                              className="w-full bg-transparent p-1.5 font-bold text-slate-700 text-center focus:bg-white focus:outline-blue-500 placeholder-slate-400"
-                              value={header} placeholder={`欄位 ${cIdx+1}`}
-                              onChange={(e) => handleCellChange(0, cIdx, e.target.value)}
-                              onPaste={(e) => handleGridPaste(e, 0, cIdx)}
-                            />
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white">
-                      {gridData.slice(1).map((row, rIdx) => {
-                        const actualRowIdx = rIdx + 1;
-                        const hasData = row.some(cell => cell.trim() !== '');
-                        
-                        return (
-                          <tr key={`r-${actualRowIdx}`} className={`${hasData ? 'bg-white' : 'bg-[#FAFAFA]'} hover:bg-blue-50/40 border-b border-slate-100`}>
-                            <td className="w-8 md:w-10 bg-slate-50 border-r border-slate-200 text-slate-400 text-center font-mono text-xs py-1">
-                              {actualRowIdx}
-                            </td>
-                            {row.map((cell, cIdx) => {
-                              const headerName = gridData[0][cIdx];
-                              const isScoreCol = headerName && headerName !== '座號' && headerName !== '姓名';
-                              
-                              let liveGrade = '';
-                              let isError = false;
-                              if (isScoreCol && cell.trim() !== '') {
-                                const num = parseFloat(cell);
-                                if (!isNaN(num)) {
-                                  const subjectSettings = currentParsedSettings.settings[headerName];
-                                  if (subjectSettings) liveGrade = getGradeLevel(num, subjectSettings);
-                                } else { isError = true; } // 非數字
-                              }
+                {/* 固定像素表格容器 */}
+                <div className="w-full border border-slate-300 rounded-xl overflow-hidden shadow-inner bg-slate-50 flex flex-col h-[400px]">
+                  <div className="overflow-y-auto w-full custom-scrollbar">
+                    {/* table-fixed 搭配寫死的 w-[750px] 確保不會被撐開 */}
+                    <table className="w-[750px] text-base border-collapse table-fixed">
+                      <thead className="sticky top-0 z-20 bg-slate-200 shadow-sm">
+                        <tr>
+                          <th className={`${COL_WIDTHS['#']} border-r border-slate-300 text-slate-600 py-3 text-center font-bold`}>#</th>
+                          {FIXED_HEADERS.map((header, cIdx) => (
+                            <th key={`h-${cIdx}`} className={`${COL_WIDTHS[header]} p-0 border-r border-slate-300 last:border-r-0 bg-slate-200`}>
+                              <div className="w-full py-3 font-bold text-slate-800 text-center tracking-wider">
+                                  {header}
+                              </div>
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white">
+                        {gridData.slice(1).map((row, rIdx) => {
+                          const actualRowIdx = rIdx + 1;
+                          const hasData = row.some(cell => cell.trim() !== '');
+                          return (
+                            <tr key={`r-${actualRowIdx}`} className={`${hasData ? 'bg-white' : 'bg-[#FDFDFD]'} hover:bg-blue-50/60 border-b border-slate-200 transition-colors`}>
+                              <td className={`${COL_WIDTHS['#']} bg-slate-100 border-r border-slate-200 text-slate-500 text-center font-mono text-sm py-2 font-medium`}>
+                                {actualRowIdx}
+                              </td>
+                              {row.map((cell, cIdx) => {
+                                const headerName = FIXED_HEADERS[cIdx];
+                                const isScoreCol = headerName !== '座號' && headerName !== '姓名';
+                                let isError = false;
+                                if (isScoreCol && cell.trim() !== '') {
+                                  const num = parseFloat(cell);
+                                  if (isNaN(num) || num < 0 || num > 100) isError = true;
+                                }
 
-                              return (
-                                <td key={`c-${cIdx}`} className="p-0 border-r border-slate-200 last:border-r-0 relative">
-                                  <div className="flex items-center px-1">
+                                return (
+                                  <td key={`c-${cIdx}`} className={`${COL_WIDTHS[headerName]} p-0 border-r border-slate-200 last:border-r-0`}>
                                     <input
                                       type="text"
-                                      className={`w-full py-1.5 px-1 focus:outline-none bg-transparent transition-all min-w-0 ${
-                                        isScoreCol ? 'text-right font-mono' : 'text-center'
-                                      } ${cell.trim() !== '' ? 'text-slate-800 font-medium' : 'text-slate-400'}
-                                      ${isError ? 'text-red-500' : ''}`}
+                                      className={`w-full h-full py-2.5 px-3 focus:outline-none focus:bg-blue-100 transition-all 
+                                        ${isScoreCol ? 'text-right font-mono text-base' : 'text-center text-base'} 
+                                        ${cell.trim() !== '' ? 'text-slate-800 font-bold' : 'text-slate-400'}
+                                        ${isError ? 'bg-red-50 text-red-600 focus:bg-red-50' : ''}`}
                                       value={cell}
+                                      placeholder={isScoreCol ? "" : ""}
                                       onChange={(e) => handleCellChange(actualRowIdx, cIdx, e.target.value)}
                                       onPaste={(e) => handleGridPaste(e, actualRowIdx, cIdx)}
                                     />
-                                    {/* 緊湊型等級標籤，直接跟在輸入框旁邊 */}
-                                    {isScoreCol && (
-                                      <div className="w-6 shrink-0 flex justify-center items-center ml-0.5 pointer-events-none">
-                                        {liveGrade && (
-                                          <span className={`text-[10px] font-black leading-none ${
-                                            liveGrade.includes('A') ? 'text-teal-600' :
-                                            liveGrade.includes('C') ? 'text-rose-500' : 'text-slate-400'
-                                          }`}>{liveGrade}</span>
-                                        )}
-                                      </div>
-                                    )}
-                                  </div>
-                                </td>
-                              );
-                            })}
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
+
               </div>
             </div>
           )}
 
-          {/* 介面三：結果區 */}
+          {/* 結果報表區 */}
           {view === 'result' && generateReportData && (
-            <div className="p-4 md:p-6 flex flex-col h-full flex-grow animate-in slide-in-from-bottom-4">
+            <div className="w-full flex flex-col h-full flex-grow p-6 animate-in slide-in-from-bottom-4">
               
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-slate-50 p-3 md:p-4 rounded-xl border border-slate-200 mb-4 gap-3">
-                <h2 className="text-lg font-bold text-slate-800 flex items-center">
-                  <CheckCircle2 className="w-5 h-5 text-teal-600 mr-2" />
-                  {selectedGrade}年級 結果 <span className="text-slate-500 text-sm font-medium ml-2">({generateReportData.data?.length || 0}筆)</span>
+              <div className="w-full flex flex-col md:flex-row justify-between items-start md:items-center bg-teal-50 p-4 rounded-xl border border-teal-200 mb-5 gap-4 shadow-sm">
+                <h2 className="text-xl font-black text-teal-900 flex items-center">
+                  <CheckCircle2 className="w-6 h-6 text-teal-600 mr-2" />
+                  {selectedGrade}年級 分析報表 <span className="text-teal-700 text-base font-bold ml-3 bg-teal-100 px-3 py-1 rounded-lg">共 {generateReportData.data?.length || 0} 筆紀錄</span>
                 </h2>
-                <div className="flex flex-wrap gap-2 w-full md:w-auto">
-                  <button onClick={() => setView('input')} className="flex-1 md:flex-none px-4 py-2 bg-white text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-100 transition-all text-sm font-bold flex justify-center items-center">
-                    <ArrowLeft className="w-3.5 h-3.5 mr-1.5" /> 返回
+                <div className="flex gap-3">
+                  <button onClick={() => setView('input')} className="px-5 py-2.5 bg-white text-slate-700 border border-slate-300 rounded-xl hover:bg-slate-50 transition-all text-sm font-bold flex justify-center items-center shadow-sm">
+                    <ArrowLeft className="w-4 h-4 mr-2" /> 修改資料
                   </button>
-                  <button onClick={handleCopyReport} className="flex-1 md:flex-none px-4 py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 transition-all text-sm font-bold flex justify-center items-center">
-                    <ClipboardCopy className="w-3.5 h-3.5 mr-1.5" /> 複製
+                  <button onClick={handleCopyReport} className="px-5 py-2.5 bg-white text-blue-700 border border-blue-200 rounded-xl hover:bg-blue-50 transition-all text-sm font-bold flex justify-center items-center shadow-sm">
+                    <ClipboardCopy className="w-4 h-4 mr-2" /> 複製表格
                   </button>
-                  <button onClick={() => exportToCSV(generateReportData.data, `${selectedGrade}年級_成績分析.csv`)} className="flex-1 md:flex-none px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all text-sm font-bold flex justify-center items-center">
-                    <FileDown className="w-3.5 h-3.5 mr-1.5" /> 匯出
+                  <button onClick={() => exportToCSV(generateReportData.data, `${selectedGrade}年級_成績分析.csv`)} className="px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all text-sm font-bold flex justify-center items-center shadow-md">
+                    <FileDown className="w-4 h-4 mr-2" /> 匯出 CSV
                   </button>
                 </div>
               </div>
 
               {generateReportData.error ? (
-                 <div className="p-10 text-center text-red-500 font-bold">{generateReportData.error}</div>
+                 <div className="w-full p-12 text-center text-red-600 font-bold text-lg bg-red-50 rounded-xl border border-red-200">{generateReportData.error}</div>
               ) : (
-                <div className="flex-grow flex flex-col min-h-[300px]">
+                <div className="w-full flex-grow flex flex-col min-h-[300px]">
                   {generateReportData.unmappedSubjects.length > 0 && (
-                    <div className="bg-amber-50 border border-amber-200 p-3 rounded-lg flex items-start text-xs md:text-sm mb-3">
-                      <AlertTriangle className="w-4 h-4 text-amber-500 mr-2 flex-shrink-0 mt-0.5" />
-                      <p className="text-amber-800">未設定的科目：<strong>{generateReportData.unmappedSubjects.join('、')}</strong>。已計入平均，但無法標示等級。</p>
+                    <div className="w-full bg-amber-50 border border-amber-200 p-4 rounded-xl flex items-start text-sm mb-4 shadow-sm">
+                      <AlertTriangle className="w-5 h-5 text-amber-500 mr-3 flex-shrink-0 mt-0.5" />
+                      <p className="text-amber-800 font-medium">未設定等級門檻的科目：<strong className="text-amber-900 mx-1">{generateReportData.unmappedSubjects.join('、')}</strong>。已自動計入平均，但無法於報表中標示 ABC 等級。</p>
                     </div>
                   )}
 
-                  <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm relative custom-scrollbar flex-grow bg-white">
-                    <div className="overflow-auto absolute inset-0">
-                      <table className="w-full text-[13px] text-left whitespace-nowrap table-fixed">
-                        <thead className="text-slate-500 bg-slate-50 uppercase font-bold sticky top-0 z-10 shadow-[0_1px_0_0_#e2e8f0]">
-                          <tr>
-                            {Object.keys(generateReportData.data[0]).map((header, idx) => (
-                              <th key={idx} className="px-4 py-3 border-r border-slate-100 last:border-r-0 truncate">
-                                {header}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {generateReportData.data.map((row, rowIndex) => (
-                            <tr key={rowIndex} className="hover:bg-blue-50/50">
-                              {Object.entries(row).map(([key, val], colIndex) => {
-                                const isGrade = typeof val === 'string' && val.includes('(') && val.includes(')');
-                                const gradeMatch = isGrade ? val.match(/\((.*?)\)/) : null;
-                                const gradeLabel = gradeMatch ? gradeMatch[1] : '';
-                                
-                                let textClass = "text-slate-700";
-                                if (gradeLabel.includes('A')) textClass = "text-teal-600 font-bold";
-                                if (gradeLabel.includes('C')) textClass = "text-rose-500 font-bold";
-                                if (key === '預估校排') textClass = "text-blue-700 font-bold";
-
-                                return (
-                                  <td key={colIndex} className={`px-4 py-2 border-r border-slate-50 last:border-r-0 truncate ${textClass}`}>
-                                    {val}
-                                  </td>
-                                );
-                              })}
-                            </tr>
+                  {/* 報表欄位多，可能超出 900px，因此加上 overflow-x-auto */}
+                  <div className="w-full border border-slate-200 rounded-xl overflow-x-auto shadow-sm bg-white custom-scrollbar flex-grow">
+                    <table className="w-max min-w-full text-[15px] text-left whitespace-nowrap table-auto">
+                      <thead className="text-slate-600 bg-slate-100 font-black sticky top-0 shadow-sm border-b border-slate-200">
+                        <tr>
+                          {Object.keys(generateReportData.data[0]).map((header, idx) => (
+                            <th key={idx} className="px-5 py-3.5 border-r border-slate-200 last:border-r-0 truncate tracking-wide">
+                              {header}
+                            </th>
                           ))}
-                        </tbody>
-                      </table>
-                    </div>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 font-medium">
+                        {generateReportData.data.map((row, rowIndex) => (
+                          <tr key={rowIndex} className="hover:bg-blue-50/70 transition-colors">
+                            {Object.entries(row).map(([key, val], colIndex) => {
+                              const isGrade = typeof val === 'string' && val.includes('(') && val.includes(')');
+                              const gradeMatch = isGrade ? val.match(/\((.*?)\)/) : null;
+                              const gradeLabel = gradeMatch ? gradeMatch[1] : '';
+                              
+                              let textClass = "text-slate-800";
+                              if (gradeLabel.includes('A')) textClass = "text-emerald-600 font-black";
+                              if (gradeLabel.includes('C')) textClass = "text-rose-600 font-black";
+                              if (key === '預估校排' || key === '班排') textClass = "text-blue-700 font-black";
+
+                              return (
+                                <td key={colIndex} className={`px-5 py-3 border-r border-slate-50 last:border-r-0 truncate ${textClass}`}>
+                                  {val}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               )}
             </div>
           )}
 
-          {/* VIEW: 管理員登入密碼區 */}
+          {/* 管理員登入區 */}
           {view === 'admin_login' && (
-             <div className="p-8 md:p-16 flex flex-col items-center justify-center flex-grow animate-in zoom-in-95">
-               <div className="bg-slate-50 p-5 rounded-full mb-4 shadow-inner">
-                 <Lock className="w-10 h-10 text-slate-400" />
+             <div className="w-full p-8 md:p-16 flex flex-col items-center justify-center flex-grow animate-in zoom-in-95">
+               <div className="bg-slate-100 p-6 rounded-full mb-6 shadow-inner border border-slate-200">
+                 <Lock className="w-12 h-12 text-slate-500" />
                </div>
-               <h2 className="text-xl font-bold text-slate-800 mb-2">管理員登入</h2>
-               <p className="text-slate-500 text-sm mb-6 text-center">輸入密碼以設定全校標準</p>
-               <form onSubmit={handleAdminLogin} className="flex flex-col w-full max-w-xs space-y-3">
-                 <input type="password" autoFocus placeholder="密碼..." className="w-full px-4 py-2 text-center tracking-widest bg-white border-2 border-slate-200 rounded-xl focus:border-teal-500 focus:outline-none" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} />
-                 <button type="submit" className="w-full py-2.5 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl shadow-sm flex justify-center items-center text-sm">
-                   解鎖 <Unlock className="w-3.5 h-3.5 ml-1.5" />
+               <h2 className="text-2xl font-black text-slate-800 mb-3">管理員身分驗證</h2>
+               <p className="text-slate-500 text-base mb-8 text-center font-medium">請輸入系統密碼以進入全校標準設定頁面</p>
+               <form onSubmit={handleAdminLogin} className="flex flex-col w-full max-w-sm space-y-4">
+                 <input type="password" autoFocus placeholder="請輸入密碼..." className="w-full px-5 py-3.5 text-center text-lg tracking-[0.2em] bg-white border-2 border-slate-300 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all focus:outline-none" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} />
+                 <button type="submit" className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-xl shadow-md flex justify-center items-center text-base transition-colors">
+                   解鎖進入設定 <Unlock className="w-5 h-5 ml-2" />
                  </button>
                </form>
              </div>
           )}
 
-          {/* VIEW: 管理員設定區 */}
+          {/* 管理員設定區 */}
           {view === 'admin_settings' && (
-            <div className="p-4 md:p-6 flex flex-col flex-grow animate-in fade-in overflow-y-auto">
-              <div className="text-center pb-4 mb-4 border-b border-slate-100 flex flex-col items-center">
-                <h2 className="text-xl font-extrabold text-slate-800 mb-3">全校標準金庫</h2>
-                <div className="flex bg-slate-100 p-1 rounded-lg space-x-1">
+            <div className="w-full p-5 md:p-8 flex flex-col flex-grow animate-in fade-in overflow-y-auto">
+              <div className="text-center pb-6 mb-6 border-b border-slate-200 flex flex-col items-center">
+                <h2 className="text-2xl font-black text-slate-800 mb-4 flex items-center">
+                   <Settings className="w-6 h-6 mr-2 text-slate-600" /> 全校標準與組距設定
+                </h2>
+                <div className="flex bg-slate-100 p-1.5 rounded-xl space-x-2 shadow-inner border border-slate-200">
                   {['7', '8', '9'].map(grade => (
-                    <button key={`admin-${grade}`} onClick={() => setSelectedGrade(grade)} className={`px-5 py-1.5 rounded-md font-bold text-sm transition-all ${selectedGrade === grade ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500'}`}>
-                      {grade} 年級
+                    <button key={`admin-${grade}`} onClick={() => setSelectedGrade(grade)} className={`px-6 py-2 rounded-lg font-black text-base transition-all ${selectedGrade === grade ? 'bg-white text-blue-700 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700'}`}>
+                      {grade} 年級設定
                     </button>
                   ))}
                 </div>
               </div>
               {!selectedGrade ? (
-                <div className="text-center py-10 text-slate-400 font-medium text-sm">請先在上方選擇年級。</div>
+                <div className="w-full text-center py-16 text-slate-400 font-bold text-lg flex flex-col items-center">
+                  <ArrowLeft className="w-8 h-8 mb-3 text-slate-300 animate-pulse" />
+                  請先在上方選擇欲設定的年級
+                </div>
               ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 flex-grow">
-                  <div className="flex flex-col bg-[#FFFCF5] p-4 rounded-2xl border border-amber-200/60 shadow-sm">
-                    <div className="flex justify-between items-center mb-3">
-                      <span className="text-sm font-bold text-amber-800">各科等級門檻</span>
+                <div className="w-full grid grid-cols-1 lg:grid-cols-2 gap-6 flex-grow">
+                  <div className="flex flex-col bg-[#FFFCF5] p-5 rounded-2xl border border-amber-200 shadow-sm">
+                    <div className="flex justify-between items-center mb-4">
+                      <span className="text-base font-black text-amber-900 flex items-center"><BookOpen className="w-5 h-5 mr-2 text-amber-600"/> 各科等級門檻 (CSV 格式)</span>
                       <div>
                         <input type="file" accept=".csv, .xlsx, .xls" style={{ display: 'none' }} ref={settingFileInputRef} onChange={(e) => handleAdminFileUpload(e, 'grade')} />
-                        <button onClick={() => settingFileInputRef.current.click()} className="px-3 py-1.5 bg-white text-amber-700 border border-amber-200 rounded-lg text-xs font-bold shadow-sm">匯入 Excel</button>
+                        <button onClick={() => settingFileInputRef.current.click()} className="px-4 py-2 bg-white text-amber-800 border border-amber-300 rounded-lg text-sm font-bold shadow-sm hover:bg-amber-50 transition-colors flex items-center">
+                          <Upload className="w-4 h-4 mr-1.5"/> 匯入設定
+                        </button>
                       </div>
                     </div>
-                    <textarea className="w-full flex-grow min-h-[250px] p-3 border border-amber-200/80 rounded-xl text-xs font-mono text-slate-700 focus:outline-none" value={appSettings[selectedGrade].grade} onChange={(e) => setAppSettings(prev => ({...prev, [selectedGrade]: {...prev[selectedGrade], grade: e.target.value}}))} />
+                    <textarea className="w-full flex-grow min-h-[300px] p-4 border border-amber-300/80 rounded-xl text-sm font-mono text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400 leading-relaxed shadow-inner" value={appSettings[selectedGrade].grade} onChange={(e) => setAppSettings(prev => ({...prev, [selectedGrade]: {...prev[selectedGrade], grade: e.target.value}}))} />
                   </div>
-                  <div className="flex flex-col bg-[#F5F9FF] p-4 rounded-2xl border border-blue-200/60 shadow-sm">
-                    <div className="flex justify-between items-center mb-3">
-                      <span className="text-sm font-bold text-blue-800">全校分數組距</span>
+                  <div className="flex flex-col bg-[#F5F9FF] p-5 rounded-2xl border border-blue-200 shadow-sm">
+                    <div className="flex justify-between items-center mb-4">
+                      <span className="text-base font-black text-blue-900 flex items-center"><Users className="w-5 h-5 mr-2 text-blue-600"/> 全校分數組距 (CSV 格式)</span>
                       <div>
                         <input type="file" accept=".csv, .xlsx, .xls" style={{ display: 'none' }} ref={distFileInputRef} onChange={(e) => handleAdminFileUpload(e, 'dist')} />
-                        <button onClick={() => distFileInputRef.current.click()} className="px-3 py-1.5 bg-white text-blue-700 border border-blue-200 rounded-lg text-xs font-bold shadow-sm">匯入 Excel</button>
+                        <button onClick={() => distFileInputRef.current.click()} className="px-4 py-2 bg-white text-blue-800 border border-blue-300 rounded-lg text-sm font-bold shadow-sm hover:bg-blue-50 transition-colors flex items-center">
+                          <Upload className="w-4 h-4 mr-1.5"/> 匯入設定
+                        </button>
                       </div>
                     </div>
-                    <textarea className="w-full flex-grow min-h-[250px] p-3 border border-blue-200/80 rounded-xl text-xs font-mono text-slate-700 focus:outline-none" value={appSettings[selectedGrade].dist} onChange={(e) => setAppSettings(prev => ({...prev, [selectedGrade]: {...prev[selectedGrade], dist: e.target.value}}))} />
+                    <textarea className="w-full flex-grow min-h-[300px] p-4 border border-blue-300/80 rounded-xl text-sm font-mono text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-400 leading-relaxed shadow-inner" value={appSettings[selectedGrade].dist} onChange={(e) => setAppSettings(prev => ({...prev, [selectedGrade]: {...prev[selectedGrade], dist: e.target.value}}))} />
                   </div>
                 </div>
               )}
@@ -641,8 +666,15 @@ export default function App() {
           )}
         </main>
         
-        <footer className="text-center text-slate-400 text-xs font-medium py-1">
-           由 蘇老爹 開發設計
+        {/* Footer 免責聲明區塊 */}
+        <footer className="w-full mt-2 space-y-3 pb-4">
+          <div className="w-full bg-amber-50/80 border border-amber-200 rounded-xl p-3 flex items-start md:items-center text-amber-800 text-sm font-medium shadow-sm">
+            <AlertTriangle className="w-5 h-5 mr-3 flex-shrink-0 text-amber-500" />
+            <p className="leading-relaxed"><strong>免責說明：</strong>本程式為教育人員自行設計之快速換算輔助工具，計算結果包含線性插值之「預估」排名，並非學校官方正式成績系統。若對成績或排名有疑問，請依據學校教務處公告為準。</p>
+          </div>
+          <div className="w-full text-center text-slate-400 text-sm font-bold py-2 tracking-wide">
+             由 蘇老爹 開發設計
+          </div>
         </footer>
 
       </div>

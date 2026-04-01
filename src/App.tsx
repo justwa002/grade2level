@@ -369,7 +369,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#F4F7F9] text-slate-800 p-4 md:p-6 font-sans flex flex-col items-center">
       {/* 限制最大寬度為 900px，居中顯示 */}
-      <div className="w-full max-w-[900px] flex flex-col flex-grow space-y-4">
+      <div className="w-full max-w-[1300px] flex flex-col flex-grow space-y-4">
         
         {/* Header */}
         <header className="w-full flex justify-between items-center bg-white p-4 md:p-5 rounded-2xl shadow-sm border border-slate-100">

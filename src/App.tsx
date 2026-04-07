@@ -136,7 +136,7 @@ export default function App() {
   
   const [notification, setNotification] = useState(null); 
   const [clearConfirm, setClearConfirm] = useState(false);
-  const [isLoading, setIsLoading] = useState(false); // 新增：雲端讀取狀態
+  const [isLoading, setIsLoading] = useState(false);
 
   const [appSettings, setAppSettings] = useState({
     '7': { grade: defaultSettings, dist: defaultDistribution },
@@ -168,12 +168,13 @@ export default function App() {
     setTimeout(() => setNotification(null), 5000);
   };
 
-  // 新增：首頁自動抓取雲端資料的函式
+  // --- 修復：補回首頁點擊年級時的自動雲端抓取函數 ---
   const handleSelectGrade = async (grade) => {
     setSelectedGrade(grade);
     const gradeUrl = CLOUD_URLS[grade]?.grade;
     const distUrl = CLOUD_URLS[grade]?.dist;
 
+    // 如果有設定雲端連結，則進行抓取
     if (gradeUrl || distUrl) {
       setIsLoading(true);
       showMsg('info', `正在自動同步 ${grade} 年級最新雲端標準...`);
@@ -194,7 +195,7 @@ export default function App() {
           ...prev,
           [grade]: { grade: newGradeText, dist: newDistText }
         }));
-        showMsg('success', `✅ 已自動套用雲端最新標準！`);
+        showMsg('success', `✅ 已自動套用 ${grade} 年級雲端最新標準！`);
       } catch (err) {
         showMsg('error', '⚠️ 雲端連線失敗，已載入系統預設標準。');
       } finally {
@@ -202,6 +203,7 @@ export default function App() {
         setView('input');
       }
     } else {
+      // 若無連結則直接進入輸入頁面
       setView('input');
     }
   };
@@ -373,7 +375,7 @@ export default function App() {
     setSelectedGrade(null);
   };
 
-  // --- 報表資料計算 (新增加權與會考等級標示) ---
+  // --- 報表資料計算 (包含加權、會考等級統計) ---
   const generateReportData = useMemo(() => {
     if (view !== 'result') return null;
     
@@ -414,7 +416,6 @@ export default function App() {
         const val = student[subject];
         const numScore = parseFloat(val);
         if (!isNaN(numScore)) {
-          // 計算加權 (若未設定則預設為 1)
           const weight = SUBJECT_WEIGHTS[subject] || 1;
           totalWeightedScore += numScore * weight;
           totalWeight += weight;
@@ -423,13 +424,11 @@ export default function App() {
              const grade = getGradeLevel(numScore, currentParsedSettings.settings[subject]);
              resultRow[subject] = `${numScore} (${grade})`;
              
-             // 統計個人會考標示
              gradeCounts[grade] = (gradeCounts[grade] || 0) + 1;
              if (grade.startsWith('A')) mainACount++;
              if (grade.startsWith('B')) mainBCount++;
              if (grade.startsWith('C')) mainCCount++;
              
-             // 累計各科等級全班人數
              if(subjectStats[subject][grade] !== undefined) {
                  subjectStats[subject][grade]++;
              }
@@ -439,10 +438,8 @@ export default function App() {
         } else { resultRow[subject] = val || ''; }
       });
       
-      // 輸出加權平均 (小數點後兩位)
       resultRow['加權平均'] = totalWeight > 0 ? parseFloat((totalWeightedScore / totalWeight).toFixed(2)) : 0;
       
-      // 組合個人會考等級字串 (例如: 5A (2A++3A+))
       const gradeOrder = ['A++', 'A+', 'A', 'B++', 'B+', 'B', 'C'];
       let detailedSummary = gradeOrder.filter(g => gradeCounts[g]).map(g => `${gradeCounts[g]}${g}`).join('');
       let mainSummary = `${mainACount > 0 ? mainACount + 'A' : ''}${mainBCount > 0 ? mainBCount + 'B' : ''}${mainCCount > 0 ? mainCCount + 'C' : ''}`;
@@ -685,7 +682,6 @@ export default function App() {
                               if (gradeLabel.includes('A')) textClass = "text-emerald-600 font-black";
                               if (gradeLabel.includes('C')) textClass = "text-rose-600 font-black";
                               
-                              // 強調特定重點欄位的顏色
                               if (key === '會考等級') textClass = "text-fuchsia-700 font-black tracking-wide";
                               if (key === '加權平均') textClass = "text-indigo-700 font-black";
                               if (key === '預估校排' || key === '班排') textClass = "text-blue-700 font-black";
@@ -712,7 +708,6 @@ export default function App() {
                             }
                             if (idx === 1) return null; // 被 colSpan 合併
                             
-                            // 判斷是否為有等級統計的科目
                             if (generateReportData.subjects.includes(header) && generateReportData.subjectStats[header]) {
                                const stats = generateReportData.subjectStats[header];
                                const hasAny = Object.values(stats).some(v => v > 0);
@@ -735,7 +730,6 @@ export default function App() {
                                  </td>
                                );
                             }
-                            // 空白儲存格 (非科目欄位)
                             return <td key={idx} className="px-5 py-3 border-r border-slate-200 last:border-r-0"></td>;
                           })}
                         </tr>

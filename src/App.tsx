@@ -136,6 +136,7 @@ export default function App() {
   
   const [notification, setNotification] = useState(null); 
   const [clearConfirm, setClearConfirm] = useState(false);
+  const [isLoading, setIsLoading] = useState(false); // 新增：雲端讀取狀態
 
   const [appSettings, setAppSettings] = useState({
     '7': { grade: defaultSettings, dist: defaultDistribution },
@@ -165,6 +166,44 @@ export default function App() {
   const showMsg = (type, text) => {
     setNotification({ type, text });
     setTimeout(() => setNotification(null), 5000);
+  };
+
+  // 新增：首頁自動抓取雲端資料的函式
+  const handleSelectGrade = async (grade) => {
+    setSelectedGrade(grade);
+    const gradeUrl = CLOUD_URLS[grade]?.grade;
+    const distUrl = CLOUD_URLS[grade]?.dist;
+
+    if (gradeUrl || distUrl) {
+      setIsLoading(true);
+      showMsg('info', `正在自動同步 ${grade} 年級最新雲端標準...`);
+      try {
+        let newGradeText = appSettings[grade].grade;
+        let newDistText = appSettings[grade].dist;
+
+        if (gradeUrl) {
+          const gradeRes = await fetch(gradeUrl);
+          if (gradeRes.ok) newGradeText = await gradeRes.text();
+        }
+        if (distUrl) {
+          const distRes = await fetch(distUrl);
+          if (distRes.ok) newDistText = await distRes.text();
+        }
+
+        setAppSettings(prev => ({
+          ...prev,
+          [grade]: { grade: newGradeText, dist: newDistText }
+        }));
+        showMsg('success', `✅ 已自動套用雲端最新標準！`);
+      } catch (err) {
+        showMsg('error', '⚠️ 雲端連線失敗，已載入系統預設標準。');
+      } finally {
+        setIsLoading(false);
+        setView('input');
+      }
+    } else {
+      setView('input');
+    }
   };
 
   const currentParsedSettings = useMemo(() => {
@@ -491,8 +530,8 @@ export default function App() {
               
               <div className="flex flex-wrap justify-center gap-6 w-full">
                 {['7', '8', '9'].map(grade => (
-                  <button key={grade} onClick={() => { setSelectedGrade(grade); setView('input'); }}
-                    className="w-32 h-40 group flex flex-col items-center justify-center p-4 bg-white border-2 border-slate-200 hover:border-blue-500 hover:shadow-lg hover:bg-blue-50/50 rounded-2xl transition-all"
+                  <button key={grade} onClick={() => handleSelectGrade(grade)} disabled={isLoading}
+                    className={`w-32 h-40 group flex flex-col items-center justify-center p-4 bg-white border-2 border-slate-200 hover:border-blue-500 hover:shadow-lg hover:bg-blue-50/50 rounded-2xl transition-all ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     <span className="text-5xl font-black text-slate-300 group-hover:text-blue-600 mb-2 transition-colors">{grade}</span>
                     <span className="text-base font-bold text-slate-500 group-hover:text-blue-800">年級專區</span>

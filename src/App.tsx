@@ -96,18 +96,70 @@ const getSchoolRank = (average, distMap) => {
   return '';
 };
 
-const exportToCSV = (data, filename) => {
-  if (!data || data.length === 0) return;
+const exportReportToExcel = (reportData, gradeLevel, showMsg) => {
+  if (!reportData || !reportData.data || reportData.data.length === 0) {
+    if (showMsg) showMsg('error', '沒有可匯出的資料');
+    return;
+  }
+
+  const { data, subjectStats } = reportData;
   const headers = Object.keys(data[0]);
+
+  // 1. 複製原始成績資料
+  const exportData = [...data];
+
+  // 2. 插入一行空白區隔
+  const emptyRow = {};
+  headers.forEach(h => emptyRow[h] = '');
+  exportData.push(emptyRow);
+
+  // 3. 插入統計大標題
+  const titleRow = {};
+  headers.forEach((h, i) => titleRow[h] = i === 0 ? '各科等級人數統計' : '');
+  exportData.push(titleRow);
+
+  // 4. 插入各級別的統計人數
+  const grades = ['A++', 'A+', 'A', 'B++', 'B+', 'B', 'C'];
+  grades.forEach(g => {
+    const row = {};
+    headers.forEach((h, i) => {
+      if (i === 0) {
+        row[h] = g; // 將等級標籤 (A++, A+...) 放在第一欄
+      } else if (subjectStats && subjectStats[h] !== undefined) {
+        row[h] = subjectStats[h][g] || 0; // 填入各科該等級的人數
+      } else {
+        row[h] = '';
+      }
+    });
+    exportData.push(row);
+  });
+
+  // 5. 優先使用 XLSX 匯出真實 Excel 檔案 (.xlsx)
+  if (window.XLSX) {
+    try {
+      const ws = window.XLSX.utils.json_to_sheet(exportData);
+      const wb = window.XLSX.utils.book_new();
+      window.XLSX.utils.book_append_sheet(wb, ws, `${gradeLevel}年級成績分析`);
+      window.XLSX.writeFile(wb, `${gradeLevel}年級_成績分析報表.xlsx`);
+      if (showMsg) showMsg('success', '✅ Excel 報表匯出成功！');
+      return;
+    } catch (error) {
+      console.error("Excel 匯出發生錯誤，改用備用 CSV 模式", error);
+    }
+  }
+
+  // 備用方案：如果 XLSX 模組異常，自動退回產生 CSV
   const csvContent = [
     headers.join(','),
-    ...data.map(row => headers.map(header => `"${row[header] || ''}"`).join(','))
+    ...exportData.map(row => headers.map(header => `"${row[header] !== undefined ? row[header] : ''}"`).join(','))
   ].join('\n');
   const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
   const link = document.createElement('a');
   const url = URL.createObjectURL(blob);
-  link.href = url; link.download = filename;
+  link.href = url; 
+  link.download = `${gradeLevel}年級_成績分析報表.csv`;
   document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
+  if (showMsg) showMsg('success', '✅ 報表匯出成功！');
 };
 
 // --- 2. 預設資料與 UI 配置 ---
@@ -642,8 +694,8 @@ export default function App() {
                   <button onClick={handleCopyReport} className="px-5 py-2.5 bg-white text-blue-700 border border-blue-200 rounded-xl hover:bg-blue-50 transition-all text-sm font-bold flex justify-center items-center shadow-sm">
                     <ClipboardCopy className="w-4 h-4 mr-2" /> 複製表格
                   </button>
-                  <button onClick={() => exportToCSV(generateReportData.data, `${selectedGrade}年級_成績分析.csv`)} className="px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all text-sm font-bold flex justify-center items-center shadow-md">
-                    <FileDown className="w-4 h-4 mr-2" /> 匯出 CSV
+                  <button onClick={() => exportReportToExcel(generateReportData, selectedGrade, showMsg)} className="px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all text-sm font-bold flex justify-center items-center shadow-md">
+                    <FileDown className="w-4 h-4 mr-2" /> 匯出 Excel
                   </button>
                 </div>
               </div>

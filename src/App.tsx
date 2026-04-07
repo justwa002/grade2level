@@ -7,20 +7,19 @@ import {
 } from 'lucide-react';
 
 // --- 雲端試算表固定連結設定 (請將此處替換為您的真實發佈連結) ---
-// 說明：Google 試算表發佈為 CSV 時，每個工作表會有獨立的網址。請將各年級的連結填入下方。
 const CLOUD_URLS = {
-  '7': { 
-    grade: "https://docs.google.com/spreadsheets/d/e/2PACX-1vR9LhxgNWTLkGftNnMkHQTR449Y_7M0NDr_IR_Oi5lTYZvCF9s01onsLaBWrxuA69DPntEwv0hFNU72/pub?gid=2077033678&single=true&output=csv", // 7年級: 各科等級門檻 CSV 連結
-    dist: "https://docs.google.com/spreadsheets/d/e/2PACX-1vR9LhxgNWTLkGftNnMkHQTR449Y_7M0NDr_IR_Oi5lTYZvCF9s01onsLaBWrxuA69DPntEwv0hFNU72/pub?gid=859457249&single=true&output=csv"   // 7年級: 全校分數組距 CSV 連結
-  },
-  '8': { 
-    grade: "https://docs.google.com/spreadsheets/d/e/2PACX-1vR9LhxgNWTLkGftNnMkHQTR449Y_7M0NDr_IR_Oi5lTYZvCF9s01onsLaBWrxuA69DPntEwv0hFNU72/pub?gid=0&single=true&output=csv", // 8年級: 各科等級門檻 CSV 連結
-    dist: "https://docs.google.com/spreadsheets/d/e/2PACX-1vR9LhxgNWTLkGftNnMkHQTR449Y_7M0NDr_IR_Oi5lTYZvCF9s01onsLaBWrxuA69DPntEwv0hFNU72/pub?gid=853170505&single=true&output=csv"   // 8年級: 全校分數組距 CSV 連結
-  },
-  '9': { 
-    grade: "https://docs.google.com/spreadsheets/d/e/2PACX-1vR9LhxgNWTLkGftNnMkHQTR449Y_7M0NDr_IR_Oi5lTYZvCF9s01onsLaBWrxuA69DPntEwv0hFNU72/pub?gid=1634530372&single=true&output=csv", // 9年級: 各科等級門檻 CSV 連結
-    dist: "https://docs.google.com/spreadsheets/d/e/2PACX-1vR9LhxgNWTLkGftNnMkHQTR449Y_7M0NDr_IR_Oi5lTYZvCF9s01onsLaBWrxuA69DPntEwv0hFNU72/pub?gid=1683092563&single=true&output=csv"   // 9年級: 全校分數組距 CSV 連結
-  }
+  '7': { grade: "", dist: "" },
+  '8': { grade: "", dist: "" },
+  '9': { grade: "", dist: "" }
+};
+
+// --- 科目加權設定 ---
+const SUBJECT_WEIGHTS = {
+  '國文': 5,
+  '英文': 3,
+  '數學': 4,
+  '社會': 3,
+  '自然': 3
 };
 
 // --- 1. 核心計算邏輯 ---
@@ -135,7 +134,6 @@ export default function App() {
   const [selectedGrade, setSelectedGrade] = useState(null); 
   const [adminPassword, setAdminPassword] = useState('');
   
-  // 狀態管理：自訂通知系統與防呆確認
   const [notification, setNotification] = useState(null); 
   const [clearConfirm, setClearConfirm] = useState(false);
 
@@ -276,7 +274,6 @@ export default function App() {
   };
 
   const fetchCloudData = async (type) => {
-    // 根據目前選擇的年級，取得對應的雲端連結
     const url = CLOUD_URLS[selectedGrade]?.[type];
     
     if (!url) {
@@ -337,6 +334,7 @@ export default function App() {
     setSelectedGrade(null);
   };
 
+  // --- 報表資料計算 (新增加權與會考等級標示) ---
   const generateReportData = useMemo(() => {
     if (view !== 'result') return null;
     
@@ -357,36 +355,73 @@ export default function App() {
     if (rawScoresData.length === 0) return { error: "尚未輸入任何成績資料。" };
 
     const unmappedSubjects = subjects.filter(sub => !currentParsedSettings.settings[sub]);
+    
+    // 初始化各科統計物件
+    const subjectStats = {};
+    subjects.forEach(sub => {
+      subjectStats[sub] = { 'A++':0, 'A+':0, 'A':0, 'B++':0, 'B+':0, 'B':0, 'C':0 };
+    });
 
     let calculatedData = rawScoresData.map(student => {
-      let totalScore = 0; let validCount = 0;
+      let totalWeightedScore = 0; 
+      let totalWeight = 0;
+      
+      const gradeCounts = {};
+      let mainACount = 0; let mainBCount = 0; let mainCCount = 0;
+      
       const resultRow = { '座號': student['座號'] || '', '姓名': student['姓名'] || '' };
       
       subjects.forEach(subject => {
         const val = student[subject];
         const numScore = parseFloat(val);
         if (!isNaN(numScore)) {
-          totalScore += numScore; validCount++;
+          // 計算加權 (若未設定則預設為 1)
+          const weight = SUBJECT_WEIGHTS[subject] || 1;
+          totalWeightedScore += numScore * weight;
+          totalWeight += weight;
+
           if (currentParsedSettings.settings[subject]) {
-             resultRow[subject] = `${numScore} (${getGradeLevel(numScore, currentParsedSettings.settings[subject])})`;
+             const grade = getGradeLevel(numScore, currentParsedSettings.settings[subject]);
+             resultRow[subject] = `${numScore} (${grade})`;
+             
+             // 統計個人會考標示
+             gradeCounts[grade] = (gradeCounts[grade] || 0) + 1;
+             if (grade.startsWith('A')) mainACount++;
+             if (grade.startsWith('B')) mainBCount++;
+             if (grade.startsWith('C')) mainCCount++;
+             
+             // 累計各科等級全班人數
+             if(subjectStats[subject][grade] !== undefined) {
+                 subjectStats[subject][grade]++;
+             }
           } else {
              resultRow[subject] = numScore;
           }
         } else { resultRow[subject] = val || ''; }
       });
-      resultRow['平均'] = validCount > 0 ? parseFloat((totalScore / validCount).toFixed(1)) : 0;
+      
+      // 輸出加權平均 (小數點後兩位)
+      resultRow['加權平均'] = totalWeight > 0 ? parseFloat((totalWeightedScore / totalWeight).toFixed(2)) : 0;
+      
+      // 組合個人會考等級字串 (例如: 5A (2A++3A+))
+      const gradeOrder = ['A++', 'A+', 'A', 'B++', 'B+', 'B', 'C'];
+      let detailedSummary = gradeOrder.filter(g => gradeCounts[g]).map(g => `${gradeCounts[g]}${g}`).join('');
+      let mainSummary = `${mainACount > 0 ? mainACount + 'A' : ''}${mainBCount > 0 ? mainBCount + 'B' : ''}${mainCCount > 0 ? mainCCount + 'C' : ''}`;
+      
+      resultRow['會考等級'] = detailedSummary ? `${mainSummary} (${detailedSummary})` : '';
+
       return resultRow;
     });
 
-    calculatedData.sort((a, b) => b['平均'] - a['平均']);
+    calculatedData.sort((a, b) => b['加權平均'] - a['加權平均']);
     calculatedData.forEach((student, index) => {
-      student['班排'] = (index > 0 && student['平均'] === calculatedData[index - 1]['平均']) ? calculatedData[index - 1]['班排'] : index + 1;
-      student['預估校排'] = getSchoolRank(student['平均'], currentDistMap);
+      student['班排'] = (index > 0 && student['加權平均'] === calculatedData[index - 1]['加權平均']) ? calculatedData[index - 1]['班排'] : index + 1;
+      student['預估校排'] = getSchoolRank(student['加權平均'], currentDistMap);
     });
 
     calculatedData.sort((a, b) => (parseInt(a['座號']) || 999) - (parseInt(b['座號']) || 999));
     
-    return { data: calculatedData, unmappedSubjects };
+    return { data: calculatedData, unmappedSubjects, subjectStats, subjects };
   }, [view, gridData, currentParsedSettings, currentDistMap]);
 
   const handleCopyReport = () => {
@@ -408,7 +443,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#F4F7F9] text-slate-800 p-4 md:p-6 font-sans flex flex-col items-center">
-      <div className="w-full max-w-[1100px] flex flex-col flex-grow space-y-4">
+      <div className="w-full max-w-[1250px] flex flex-col flex-grow space-y-4">
         
         <header className="w-full flex justify-between items-center bg-white p-4 md:p-5 rounded-2xl shadow-sm border border-slate-100">
           <div className="flex items-center space-x-4 cursor-pointer" onClick={goHome}>
@@ -589,8 +624,8 @@ export default function App() {
                   )}
 
                   <div className="w-full border border-slate-200 rounded-xl overflow-x-auto shadow-sm bg-white custom-scrollbar flex-grow">
-                    <table className="w-max min-w-full text-[15px] text-center whitespace-nowrap table-auto">
-                      <thead className="text-slate-600 bg-slate-100 font-black sticky top-0 shadow-sm border-b border-slate-200">
+                    <table className="w-max min-w-full text-[15px] text-center whitespace-nowrap table-auto border-collapse">
+                      <thead className="text-slate-600 bg-slate-100 font-black sticky top-0 shadow-sm border-b-2 border-slate-300">
                         <tr>
                           {Object.keys(generateReportData.data[0] || {}).map((header, idx) => (
                             <th key={idx} className="px-5 py-3.5 border-r border-slate-200 last:border-r-0 tracking-wide">
@@ -610,10 +645,14 @@ export default function App() {
                               let textClass = "text-slate-800";
                               if (gradeLabel.includes('A')) textClass = "text-emerald-600 font-black";
                               if (gradeLabel.includes('C')) textClass = "text-rose-600 font-black";
+                              
+                              // 強調特定重點欄位的顏色
+                              if (key === '會考等級') textClass = "text-fuchsia-700 font-black tracking-wide";
+                              if (key === '加權平均') textClass = "text-indigo-700 font-black";
                               if (key === '預估校排' || key === '班排') textClass = "text-blue-700 font-black";
 
                               return (
-                                <td key={colIndex} className={`px-5 py-3 border-r border-slate-50 last:border-r-0 ${textClass}`}>
+                                <td key={colIndex} className={`px-4 py-3 border-r border-slate-50 last:border-r-0 ${textClass}`}>
                                   {val}
                                 </td>
                               );
@@ -621,6 +660,47 @@ export default function App() {
                           </tr>
                         ))}
                       </tbody>
+                      {/* --- 各科統計 Footer --- */}
+                      <tfoot className="bg-amber-50/60 border-t-2 border-slate-300">
+                        <tr>
+                          {Object.keys(generateReportData.data[0] || {}).map((header, idx) => {
+                            if (idx === 0) {
+                              return (
+                                <td key={idx} colSpan={2} className="px-5 py-5 font-black text-slate-700 text-right tracking-widest border-r border-slate-200 align-top">
+                                  各科等級人數統計
+                                </td>
+                              );
+                            }
+                            if (idx === 1) return null; // 被 colSpan 合併
+                            
+                            // 判斷是否為有等級統計的科目
+                            if (generateReportData.subjects.includes(header) && generateReportData.subjectStats[header]) {
+                               const stats = generateReportData.subjectStats[header];
+                               const hasAny = Object.values(stats).some(v => v > 0);
+                               return (
+                                 <td key={idx} className="px-4 py-4 text-left align-top border-r border-slate-200">
+                                   {hasAny ? (
+                                     <div className="flex flex-col gap-1.5 text-[13px] w-full min-w-[70px] mx-auto">
+                                       {['A++', 'A+', 'A', 'B++', 'B+', 'B', 'C'].map(g => (
+                                          stats[g] > 0 ? (
+                                            <div key={g} className="flex justify-between items-center w-full">
+                                              <span className={`font-black tracking-tighter ${g.includes('A') ? 'text-emerald-600' : g.includes('C') ? 'text-rose-600' : 'text-slate-600'}`}>{g}</span>
+                                              <span className="text-slate-600 font-black bg-white px-2 py-0.5 rounded shadow-sm border border-slate-200 text-xs">{stats[g]}</span>
+                                            </div>
+                                          ) : null
+                                       ))}
+                                     </div>
+                                   ) : (
+                                     <span className="text-slate-400 text-xs flex justify-center">-</span>
+                                   )}
+                                 </td>
+                               );
+                            }
+                            // 空白儲存格 (非科目欄位)
+                            return <td key={idx} className="px-5 py-3 border-r border-slate-200 last:border-r-0"></td>;
+                          })}
+                        </tr>
+                      </tfoot>
                     </table>
                   </div>
                 </div>

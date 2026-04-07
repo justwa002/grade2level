@@ -8,9 +8,9 @@ import {
 
 // --- 雲端試算表固定連結設定 (請將此處替換為您的真實發佈連結) ---
 const CLOUD_URLS = {
-  '7': { grade: "", dist: "" },
-  '8': { grade: "", dist: "" },
-  '9': { grade: "", dist: "" }
+  '7': { grade: "https://docs.google.com/spreadsheets/d/e/2PACX-1vR9LhxgNWTLkGftNnMkHQTR449Y_7M0NDr_IR_Oi5lTYZvCF9s01onsLaBWrxuA69DPntEwv0hFNU72/pub?gid=2077033678&single=true&output=csv", dist: "https://docs.google.com/spreadsheets/d/e/2PACX-1vR9LhxgNWTLkGftNnMkHQTR449Y_7M0NDr_IR_Oi5lTYZvCF9s01onsLaBWrxuA69DPntEwv0hFNU72/pub?gid=859457249&single=true&output=csv" },
+  '8': { grade: "https://docs.google.com/spreadsheets/d/e/2PACX-1vR9LhxgNWTLkGftNnMkHQTR449Y_7M0NDr_IR_Oi5lTYZvCF9s01onsLaBWrxuA69DPntEwv0hFNU72/pub?gid=0&single=true&output=csv", dist: "https://docs.google.com/spreadsheets/d/e/2PACX-1vR9LhxgNWTLkGftNnMkHQTR449Y_7M0NDr_IR_Oi5lTYZvCF9s01onsLaBWrxuA69DPntEwv0hFNU72/pub?gid=853170505&single=true&output=csv" },
+  '9': { grade: "https://docs.google.com/spreadsheets/d/e/2PACX-1vR9LhxgNWTLkGftNnMkHQTR449Y_7M0NDr_IR_Oi5lTYZvCF9s01onsLaBWrxuA69DPntEwv0hFNU72/pub?gid=1634530372&single=true&output=csv", dist: "https://docs.google.com/spreadsheets/d/e/2PACX-1vR9LhxgNWTLkGftNnMkHQTR449Y_7M0NDr_IR_Oi5lTYZvCF9s01onsLaBWrxuA69DPntEwv0hFNU72/pub?gid=1683092563&single=true&output=csv" }
 };
 
 // --- 科目加權設定 ---

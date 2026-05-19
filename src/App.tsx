@@ -616,7 +616,7 @@ export default function App() {
                     </button>
                   </div>
                   <button onClick={() => gridData.slice(1).some(r => r.some(c => c)) ? setView('result') : showMsg('error', '請先輸入成績資料')} className="px-6 py-2.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl transition-all shadow-md text-base flex items-center justify-center">
-                    產生報表 <ChevronRight className="w-5 h-5 ml-1" />
+                    換算成績 <ChevronRight className="w-5 h-5 ml-1" />
                   </button>
                 </div>
 

@@ -3,7 +3,7 @@ import {
   Settings, FileInput, BarChart3, Download, Table as TableIcon, 
   LayoutGrid, AlertCircle, ChevronRight, Users, User, ShieldCheck, 
   Save, LogOut, Search, RefreshCw, Link as LinkIcon, Info,
-  ArrowLeft, Copy, Check
+  ArrowLeft, Copy, Check, Bell
 } from 'lucide-react';
 
 // === 系統常數與使用者提供之設定 ===
@@ -48,11 +48,17 @@ const Disclaimer = () => (
 // === 核心解析邏輯 ===
 const getInitialAppData = () => {
   const saved = localStorage.getItem('gradeAppData');
-  if (saved) return JSON.parse(saved);
+  if (saved) {
+    const parsed = JSON.parse(saved);
+    // 確保有預設的日誌內容
+    if (!parsed.updateLog) parsed.updateLog = '2026/5/22更新115年下學期第二次段考組距';
+    return parsed;
+  }
   return {
     '7': { grade: defaultSettings, dist: defaultDistribution },
     '8': { grade: defaultSettings, dist: defaultDistribution },
-    '9': { grade: defaultSettings, dist: defaultDistribution }
+    '9': { grade: defaultSettings, dist: defaultDistribution },
+    updateLog: '2026/5/22更新115年下學期第二次段考組距'
   };
 };
 
@@ -166,6 +172,17 @@ export default function App() {
             <h1 className="text-2xl font-bold text-gray-900">成績落點與校排精算系統</h1>
             <p className="text-sm text-gray-500 mt-2">支援加權平均與組距內插法排名</p>
           </div>
+
+          {/* 首頁日誌公告區 */}
+          {appSettings.updateLog && (
+            <div className="bg-amber-50 border border-amber-200 text-amber-800 p-3 rounded-xl mb-4 text-sm flex items-start gap-2 text-left shadow-sm">
+              <Bell className="shrink-0 mt-0.5 text-amber-600" size={18} />
+              <div>
+                <span className="font-bold">最新資料：</span>
+                {appSettings.updateLog}
+              </div>
+            </div>
+          )}
           
           <div className="space-y-4">
             <button onClick={() => setRole('teacher')} className="w-full flex items-center p-4 border border-gray-200 hover:border-indigo-500 hover:bg-indigo-50 rounded-xl transition-all group">
@@ -229,7 +246,7 @@ export default function App() {
 
 
 // ==========================================
-// Admin View Component
+// Admin View Component (雲端 CSV 同步)
 // ==========================================
 function AdminView({ appSettings, setAppSettings, parsedData }) {
   const [isLoading, setIsLoading] = useState(false);
@@ -284,6 +301,21 @@ function AdminView({ appSettings, setAppSettings, parsedData }) {
           </button>
           {msg && <span className="text-sm font-bold text-purple-800 bg-purple-100 px-2 py-1 rounded">{msg}</span>}
         </div>
+      </div>
+
+      {/* --- 新增：公告與日誌設定區塊 --- */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mb-6">
+        <h3 className="font-bold text-gray-800 text-md flex items-center gap-2 mb-3">
+          <Bell size={18} className="text-amber-500"/> 首頁公告與資料更新日誌
+        </h3>
+        <input
+          type="text"
+          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-sm font-medium"
+          value={appSettings.updateLog || ''}
+          onChange={(e) => setAppSettings({ ...appSettings, updateLog: e.target.value })}
+          placeholder="例如：2026/5/22更新115年下學期第二次段考組距"
+        />
+        <p className="text-xs text-gray-500 mt-2">修改此處的文字會即時顯示在系統首頁，方便讓使用者知道目前的數據版本。</p>
       </div>
 
       <div className="mb-6">

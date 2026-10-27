@@ -623,7 +623,7 @@ function TeacherView({ parsedData }) {
                     <th className="px-4 py-3 text-left font-bold text-gray-900 border-r min-w-[60px]">座號/姓名</th>
                     <th className="px-4 py-3 text-center font-bold text-indigo-700 bg-indigo-50 border-r">加權平均</th>
                     <th className="px-4 py-3 text-center font-bold text-indigo-700 bg-indigo-50 border-r">班排</th>
-                    <th className="px-4 py-3 text-center font-bold text-purple-700 bg-purple-50 border-r min-w-[220px]">Monte Carlo 預估校排 (95% CI)</th>
+                    <th className="px-4 py-3 text-center font-bold text-purple-700 bg-purple-50 border-r min-w-[220px]">預估校排 </th>
                     {SUBJECTS.map(sub => <th key={sub} className="px-3 py-3 text-center font-bold text-gray-900">{sub}</th>)}
                   </tr>
                 </thead>

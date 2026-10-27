@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { 
   Settings, FileInput, BarChart3, Download, Table as TableIcon, 
   LayoutGrid, AlertCircle, ChevronRight, Users, User, ShieldCheck, 
@@ -54,7 +54,6 @@ const boxMullerTransform = () => {
   return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
 };
 
-// 計算基礎線性內插排名
 const getInterpolatedRank = (average, distMap) => {
   if (isNaN(average) || !distMap || distMap.length === 0) return null;
   for (let i = 0; i < distMap.length; i++) {
@@ -72,13 +71,6 @@ const getInterpolatedRank = (average, distMap) => {
   return null;
 };
 
-/**
- * 蒙地卡羅聯合分佈校排模擬演算法
- * @param {number} average 學生加權平均分
- * @param {Array} distMap 校排組距表
- * @param {number} numSimulations 模擬次數 (預設 3000 次)
- * @param {number} rho 考科間相關係數 (預設 0.72)
- */
 const runMonteCarloRankSimulation = (average, distMap, numSimulations = 3000, rho = 0.72) => {
   const baseResult = getInterpolatedRank(average, distMap);
   if (!baseResult) return { rankStr: '-', detail: null };
@@ -86,13 +78,11 @@ const runMonteCarloRankSimulation = (average, distMap, numSimulations = 3000, rh
   const totalStudents = distMap[distMap.length - 1]?.cumulative || 1000;
   const baseRank = baseResult.rank;
 
-  // 跨科聯合分佈加權影響因子
   const sqrtRho = Math.sqrt(rho);
   const sqrtOneMinusRho = Math.sqrt(1 - rho);
   const weights = Object.values(SUBJECT_WEIGHTS);
   const totalW = TOTAL_WEIGHT;
 
-  // 計算權重組合下的隨機標準差衰減
   const effectiveStd = Math.sqrt(
     Math.pow(weights.reduce((a, b) => a + b, 0) / totalW * sqrtRho, 2) +
     weights.reduce((sum, w) => sum + Math.pow(w / totalW * sqrtOneMinusRho, 2), 0)
@@ -102,7 +92,6 @@ const runMonteCarloRankSimulation = (average, distMap, numSimulations = 3000, rh
   const rankNoiseScale = Math.max(8, totalStudents * 0.012 * effectiveStd);
 
   for (let i = 0; i < numSimulations; i++) {
-    // 產生共同潛在因素 Z0 與 5 科獨立因素 Z1..Z5
     const z0 = boxMullerTransform();
     let weightedZ = 0;
     
@@ -112,7 +101,6 @@ const runMonteCarloRankSimulation = (average, distMap, numSimulations = 3000, rh
       weightedZ += (w / totalW) * xi;
     });
 
-    // 將聯合機率擾動映射至校排區間
     let simRank = Math.round(baseRank + weightedZ * rankNoiseScale);
     simRank = Math.max(1, Math.min(totalStudents, simRank));
     simulatedRanks.push(simRank);
@@ -229,6 +217,38 @@ export default function App() {
     return data;
   }, [appSettings]);
 
+  // 新增：自動同步單一年級資料的函數 (提供給 TeacherView 與 ParentView 呼叫)
+  const syncGradeData = useCallback(async (grade) => {
+    try {
+      const gradeUrl = CLOUD_URLS[grade]?.grade;
+      const distUrl = CLOUD_URLS[grade]?.dist;
+      if (!gradeUrl || !distUrl) return;
+
+      const [gradeRes, distRes] = await Promise.all([
+        fetch(gradeUrl),
+        fetch(distUrl)
+      ]);
+
+      if (gradeRes.ok && distRes.ok) {
+        const gradeText = await gradeRes.text();
+        const distText = await distRes.text();
+        
+        setAppSettings(prev => {
+          // 若資料相同則不觸發更新，避免多餘的重繪
+          if (prev[grade].grade === gradeText && prev[grade].dist === distText) {
+            return prev;
+          }
+          return {
+            ...prev,
+            [grade]: { grade: gradeText, dist: distText }
+          };
+        });
+      }
+    } catch (error) {
+      console.error(`自動更新 ${grade} 年級資料失敗:`, error);
+    }
+  }, []);
+
   if (!role) {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
@@ -305,8 +325,8 @@ export default function App() {
       </header>
       <main className="max-w-6xl mx-auto px-4 py-6 flex-1 w-full">
         {role === 'admin' && <AdminView appSettings={appSettings} setAppSettings={setAppSettings} parsedData={parsedData} />}
-        {role === 'teacher' && <TeacherView parsedData={parsedData} />}
-        {role === 'parent' && <ParentView parsedData={parsedData} />}
+        {role === 'teacher' && <TeacherView parsedData={parsedData} syncGradeData={syncGradeData} />}
+        {role === 'parent' && <ParentView parsedData={parsedData} syncGradeData={syncGradeData} />}
       </main>
       {(role === 'parent' || role === 'teacher' || role === 'admin') && <Disclaimer />}
     </div>
@@ -449,11 +469,22 @@ function AdminView({ appSettings, setAppSettings, parsedData }) {
 // ==========================================
 // Teacher View Component
 // ==========================================
-function TeacherView({ parsedData }) {
+function TeacherView({ parsedData, syncGradeData }) {
   const [activeGrade, setActiveGrade] = useState('7');
   const [rawData, setRawData] = useState('');
   const [results, setResults] = useState(null);
   const [copyOk, setCopyOk] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  // 新增：當 activeGrade 改變時，自動呼叫背景同步
+  useEffect(() => {
+    const sync = async () => {
+      setIsSyncing(true);
+      await syncGradeData(activeGrade);
+      setIsSyncing(false);
+    };
+    sync();
+  }, [activeGrade, syncGradeData]);
 
   const handleProcessData = () => {
     if (!rawData.trim()) return;
@@ -553,8 +584,11 @@ function TeacherView({ parsedData }) {
 
   return (
     <div className="space-y-6 animate-in fade-in">
-      <div className="mb-2">
-        <label className="block text-sm font-bold text-gray-700 mb-3 text-center">👇 請先選擇要分析的年級 👇</label>
+      <div className="mb-2 relative">
+        <label className="block text-sm font-bold text-gray-700 mb-3 text-center">
+          👇 請先選擇要分析的年級 👇
+          {isSyncing && <span className="ml-2 text-indigo-500 inline-flex items-center text-xs"><RefreshCw size={12} className="animate-spin mr-1"/>載入雲端資料中...</span>}
+        </label>
         <div className="grid grid-cols-3 gap-3 sm:gap-6">
           {GRADES.map(g => (
             <button 
@@ -657,10 +691,21 @@ function TeacherView({ parsedData }) {
 // ==========================================
 // Parent View Component
 // ==========================================
-function ParentView({ parsedData }) {
+function ParentView({ parsedData, syncGradeData }) {
   const [activeGrade, setActiveGrade] = useState('7');
   const [scores, setScores] = useState({ 國文: '', 英文: '', 數學: '', 社會: '', 自然: '' });
   const [result, setResult] = useState(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  // 新增：當 activeGrade 改變時，自動呼叫背景同步
+  useEffect(() => {
+    const sync = async () => {
+      setIsSyncing(true);
+      await syncGradeData(activeGrade);
+      setIsSyncing(false);
+    };
+    sync();
+  }, [activeGrade, syncGradeData]);
 
   const handleCalculate = () => {
     const gradeData = parsedData[activeGrade];
@@ -692,8 +737,11 @@ function ParentView({ parsedData }) {
           <p className="text-sm text-emerald-700 mt-1">採用蒙地卡羅 5 科聯合分佈模擬 ($r \approx 0.72$)，精確推估預估校排與 95% 信心區間。</p>
         </div>
         <div className="p-6 space-y-6">
-          <div className="mb-2">
-            <label className="block text-sm font-bold text-gray-700 mb-3 text-center">👇 請先選擇就讀年級 👇</label>
+          <div className="mb-2 relative">
+            <label className="block text-sm font-bold text-gray-700 mb-3 text-center">
+              👇 請先選擇就讀年級 👇
+              {isSyncing && <span className="ml-2 text-emerald-500 inline-flex items-center text-xs"><RefreshCw size={12} className="animate-spin mr-1"/>載入雲端資料中...</span>}
+            </label>
             <div className="grid grid-cols-3 gap-3 sm:gap-6">
               {GRADES.map(g => (
                 <button 

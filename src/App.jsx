@@ -237,7 +237,7 @@ export default function App() {
             <div className="bg-indigo-600 text-white p-3 rounded-2xl inline-block mb-4 shadow-md">
               <BarChart3 size={32} />
             </div>
-            <h1 className="text-2xl font-bold text-gray-900">成績落點與校排精算系統</h1>
+            <h1 className="text-2xl font-bold text-gray-900">成績落點與校排估算系統</h1>
             <p className="text-xs text-indigo-600 font-bold mt-1 bg-indigo-50 py-1 px-3 rounded-full inline-block">
               蒙地卡羅 5 科聯合分佈模擬引擎 (r ≈ 0.72)
             </p>
